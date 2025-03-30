@@ -288,12 +288,16 @@ def example():
 
         min_parallelism = get_feasible_parallelisms(benchmark)[0]
         max_parallelism = get_feasible_parallelisms(benchmark)[-1]
+
+        # for 2 parr - 8 <> 16
+
         for freq in (1, 2):
             #for parallelism in (max_parallelism,):
             for parallelism in (3, ):
                 # you can also use try_run instead
                 # run(['{:.1f}GHz'.format(freq), 'maxFreq', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-                run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                # run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
 
 def example_symmetric_perforation():
     for benchmark in (
