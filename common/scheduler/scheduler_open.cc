@@ -27,6 +27,30 @@
 #include <iostream>
 #include <bits/stdc++.h>
 
+/*
+#include "scheduler_open.h"
+#include "config.hpp"
+#include "thread.h"
+#include "core_manager.h"
+#include "performance_model.h"
+#include "magic_server.h"
+#include "thread_manager.h"
+
+#include "policies/dvfsMaxFreq.h"
+#include "policies/dvfsFixedPower.h"
+#include "policies/dvfsTSP.h"
+#include "policies/dvfsTestStaticPower.h"
+#include "policies/mapFirstUnused.h"
+#include "policies/pcgov.h"
+
+#include <iomanip>
+#include <random>
+#include <vector>
+#include <queue>
+#include <iostream>
+#include <bits/stdc++.h>
+*/
+
 using namespace std;
 
 int k=0;
@@ -181,8 +205,8 @@ SchedulerOpen::SchedulerOpen(ThreadManager *thread_manager)
     double tdp = Sim()->getCfg()->getFloat("periodic_thermal/tdp");
     // SP: Set thermalModel to NULL because it is only used for tsp mode
     // Real fix would be to make it subcomp aware or guard it with a check on the dvfs policy
-	// thermalModel = new ThermalModel((unsigned int)coreRows, (unsigned int)coreColumns, Sim()->getCfg()->getString("periodic_thermal/thermal_model"), ambientTemperature, maxTemperature, inactivePower, tdp);
-	thermalModel = NULL;
+	thermalModel = new ThermalModel((unsigned int)coreRows, (unsigned int)coreColumns, Sim()->getCfg()->getString("periodic_thermal/thermal_model"), ambientTemperature, maxTemperature, inactivePower, tdp);
+	// thermalModel = NULL;
 
 	//Initialize the cores in the system.
 	for (int coreIterator=0; coreIterator < numberOfCores; coreIterator++) {
@@ -294,8 +318,11 @@ void SchedulerOpen::initMappingPolicy(String policyName) {
 		mappingPolicy = new MapFirstUnused(coreRows, coreColumns, preferredCoresOrder);
 	} //else if (policyName ="XYZ") {... } //Place to instantiate a new mapping logic. Implementation is put in "policies" package.
 	else if (policyName == "PCGov") {
+		cout<<"hello"<<endl;
 		float delta = Sim()->getCfg()->getFloat("scheduler/open/dvfs/pcgov/delta");
+		cout<<"hello->"<<delta<<endl;
 		mappingPolicy = new PCGov(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, delta);
+		cout<<"hello->"<<delta<<endl;
 	} 
 	else {
 		cout << "\n[Scheduler] [Error]: Unknown Mapping Algorithm" << endl;
