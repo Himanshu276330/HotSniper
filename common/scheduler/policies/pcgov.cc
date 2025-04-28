@@ -241,6 +241,17 @@ std::vector<int> PCGov::getFrequencies(const std::vector<int> &oldFrequencies, c
 			cout << " T=" << fixed << setprecision(1) << temperature << " °C";
 			cout << " utilization=" << fixed << setprecision(4) << utilization << endl;
 
+			float RelNUCACPI  = performanceCounters->getRelNUCACPIOfCore(coreCounter);
+           	float IPS         = performanceCounters->getIPSOfCore(coreCounter);
+           	float cpi_total   = performanceCounters->getCPIOfCore(coreCounter);
+           	float peak_temperature = performanceCounters->getPeakTemperature();
+
+			cout << " IPS=" << fixed << setprecision(3) << IPS ;
+           	cout << " RelNUCACPI=" << fixed << setprecision(3) << RelNUCACPI ;
+           	cout << " hotspot_peak_temperature=" << fixed << setprecision(3) << peak_temperature ;
+           	cout << " cpi-total=" << fixed << setprecision(3) <<cpi_total << endl;
+
+
 			int expectedGoodFrequency = PowerModel::getExpectedGoodFrequency(frequency, power, powerBudget, minFrequency, maxFrequency, frequencyStepSize);
 			frequencies.at(coreCounter) = expectedGoodFrequency;
 		} else {

@@ -19,6 +19,8 @@
 #include "policies/dvfsTestStaticPower.h"
 #include "policies/mapFirstUnused.h"
 #include "policies/pcgov.h"
+#include "policies/pcmig.h"
+
 
 #include <iomanip>
 #include <random>
@@ -318,11 +320,12 @@ void SchedulerOpen::initMappingPolicy(String policyName) {
 		mappingPolicy = new MapFirstUnused(coreRows, coreColumns, preferredCoresOrder);
 	} //else if (policyName ="XYZ") {... } //Place to instantiate a new mapping logic. Implementation is put in "policies" package.
 	else if (policyName == "PCGov") {
-		cout<<"hello"<<endl;
 		float delta = Sim()->getCfg()->getFloat("scheduler/open/dvfs/pcgov/delta");
-		cout<<"hello->"<<delta<<endl;
 		mappingPolicy = new PCGov(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, delta);
-		cout<<"hello->"<<delta<<endl;
+	} 
+	else if (policyName == "PCMig") {
+		float delta = Sim()->getCfg()->getFloat("scheduler/open/dvfs/pcgov/delta");
+		mappingPolicy = new PCMig(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, delta);
 	} 
 	else {
 		cout << "\n[Scheduler] [Error]: Unknown Mapping Algorithm" << endl;
@@ -332,7 +335,7 @@ void SchedulerOpen::initMappingPolicy(String policyName) {
 
 /** initDVFSPolicy
  * Initialize the DVFS policy to the policy with the given name
- */
+*/
 void SchedulerOpen::initDVFSPolicy(String policyName) {
 	cout << "[Scheduler] [Info]: Initializing DVFS policy" << endl;
 	if (policyName == "off") {
@@ -357,6 +360,10 @@ void SchedulerOpen::initDVFSPolicy(String policyName) {
 	else if (policyName == "PCGov") {
 		float delta = Sim()->getCfg()->getFloat("scheduler/open/dvfs/pcgov/delta");
 		dvfsPolicy = new PCGov(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, delta);
+	}
+	else if (policyName == "PCMig") {
+		float delta = Sim()->getCfg()->getFloat("scheduler/open/dvfs/pcgov/delta");
+		dvfsPolicy = new PCMig(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, delta);
 	}
 	else {
 		cout << "\n[Scheduler] [Error]: Unknown DVFS Algorithm" << endl;

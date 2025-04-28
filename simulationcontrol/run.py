@@ -262,15 +262,16 @@ def get_workload(benchmark, cores, parallelism=None, number_tasks=None, input_se
 
 def example():
     for benchmark in (
-                      'parsec-blackscholes',
-                      #'parsec-bodytrack',
-                      #'parsec-canneal',
-                      #'parsec-dedup',
+                    #   'parsec-blackscholes',
+                      'parsec-bodytrack',
+                    #   'parsec-canneal',
+                    #   'parsec-dedup',
+                    #   'parsec-fluidanimate',
+                    #   'parsec-streamcluster',
+                    #   'parsec-swaptions',
+                    #   'parsec-x264',
+
                       #'parsec-ferret'
-                      #'parsec-fluidanimate',
-                      #'parsec-streamcluster',
-                      #'parsec-swaptions',
-                      #'parsec-x264',
                       #'splash2-barnes',
                       #'splash2-fmm',
                       #'splash2-ocean.cont',
@@ -286,18 +287,25 @@ def example():
                       #'splash2-radix',
                       ):
 
-        min_parallelism = get_feasible_parallelisms(benchmark)[0]
-        max_parallelism = get_feasible_parallelisms(benchmark)[-1]
+        # min_parallelism = get_feasible_parallelisms(benchmark)[0]
+        # max_parallelism = get_feasible_parallelisms(benchmark)[-1]
 
         # for 2 parr - 8 <> 16
 
-        for freq in (1, 2):
-            #for parallelism in (max_parallelism,):
-            for parallelism in (3, ):
-                # you can also use try_run instead
+        # for freq in (1, 2):
+        #     #for parallelism in (max_parallelism,):
+        #     for parallelism in (3, ):
+        #         # you can also use try_run instead
+        #         # run(['{:.1f}GHz'.format(freq), 'maxFreq', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+        #         # run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+        #         run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+
+        for freq in (1, 2, 3, 3.5):
+            for parallelism in (8, 16):
                 # run(['{:.1f}GHz'.format(freq), 'maxFreq', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
                 # run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-                run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                # run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                run(['{:.1f}GHz'.format(freq), 'PCMig', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
 
 def example_symmetric_perforation():
     for benchmark in (
