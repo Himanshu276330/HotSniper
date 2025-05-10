@@ -2,8 +2,17 @@
 #include <iomanip>
 #include <limits>
 #include <tuple>
-#include <fstream> // NEW include
+#include <ctime>
+#include <sstream>
 #include "powermodel.h"
+
+#include <fstream>
+#include <iostream>
+#include <unordered_map>
+#include <string>
+
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 using namespace std;
 
@@ -22,13 +31,31 @@ PCMig::PCMig(ThermalModel *thermalModel, PerformanceCounters *performanceCounter
 		}
 	}
 
-    // Open CSV file
-    logFile.open("logs.csv", std::ios::out | std::ios::app); // append mode
-    if (!logFile.is_open()) {
-        cerr << "Error opening logs.csv for writing!" << endl;
-        exit(1);
-    }
+	string result_path;
+	ifstream configFile("/home/shekhar154/Desktop/sem_8/HotSniper_old/result_path_variable.json");
+	if (!configFile.is_open()) {
+		cerr << "Error reading config file!" << endl;
+		throw runtime_error("Cannot open config file");
+	}
+
+	json configJson;
+	try {
+		configFile >> configJson;  // Parse the whole JSON file
+		result_path = configJson.at("result_path");  // Access the key safely
+		cout << "Result path: " << result_path << endl;
+	} catch (json::exception& e) {
+		cerr << "Error parsing JSON: " << e.what() << endl;
+		throw;
+	}
+
+    logFile.open(result_path+".csv", ios::out | ios::app); // append mode
+	if (!logFile.is_open()) {
+		cerr << "Error opening logs.csv for writing! " << result_path << endl;
+		throw std::runtime_error("Failed to open log file at " + result_path);
+	}
+
     headerWritten = false;
+    mappingHeaderWritten = false;
 }
 
 PCMig::~PCMig() {
@@ -52,144 +79,6 @@ float PCMig::getCoreAMD(int coreY, int coreX) {
 	}
 	return (float)md_sum / coreColumns / coreRows;
 }
-
-// The rest (getMappingCandidates and map) are unchanged...
-
-void PCMig::updatePowerBudgets(const std::vector<int> &oldFrequencies) {
-	bool recalculateComputeBound = false;
-	for (unsigned int coreCounter = 0; coreCounter < coreRows * coreColumns; coreCounter++) {
-		double utilization = performanceCounters->getUtilizationOfCore(coreCounter);
-		double power = utilization > 0 ? performanceCounters->getPowerOfCore(coreCounter) : 0;
-		int frequency = oldFrequencies.at(coreCounter);
-		bool atMaximumFrequency = (frequency == maxFrequency);
-		switch (threadStates.at(coreCounter)) {
-			case ThreadState::IDLE:
-				if (utilization > 0) {
-					cout << "[Scheduler][PCMig] Core " << coreCounter << " switches to state COMPUTE" << endl;
-					threadStates.at(coreCounter) = ThreadState::COMPUTE;
-					powerBudgets.at(coreCounter) = -1;
-					recalculateComputeBound = true;
-				}
-				break;
-			case ThreadState::COMPUTE:
-				if (utilization == 0) {
-					cout << "[Scheduler][PCMig] Core " << coreCounter << " switches to state IDLE due to low utilization" << endl;
-					threadStates.at(coreCounter) = ThreadState::IDLE;
-					powerBudgets.at(coreCounter) = thermalModel->getInactivePower();
-					recalculateComputeBound = true;
-				} else if (atMaximumFrequency && (power < powerBudgets.at(coreCounter) - delta)) {
-					cout << "[Scheduler][PCMig] Core " << coreCounter << " switches to state MEMORY due to low power consumption" << endl;
-					threadStates.at(coreCounter) = ThreadState::MEMORY;
-					powerBudgets.at(coreCounter) = power + delta;
-					recalculateComputeBound = true;
-				}
-				break;
-			case ThreadState::MEMORY:
-				if (utilization == 0) {
-					cout << "[Scheduler][PCMig] Core " << coreCounter << " switches to state IDLE due to low utilization" << endl;
-					threadStates.at(coreCounter) = ThreadState::IDLE;
-					powerBudgets.at(coreCounter) = thermalModel->getInactivePower();
-					recalculateComputeBound = true;
-				} else if (!atMaximumFrequency || (power > powerBudgets.at(coreCounter))) {
-					cout << "[Scheduler][PCMig] Core " << coreCounter << " switches to state COMPUTE due to high power consumption" << endl;
-					threadStates.at(coreCounter) = ThreadState::COMPUTE;
-					powerBudgets.at(coreCounter) = -1;
-					recalculateComputeBound = true;
-				} else if (power < powerBudgets.at(coreCounter) - delta) {
-					powerBudgets.at(coreCounter) = power + delta;
-					recalculateComputeBound = true;
-				}
-				break;
-			default:
-				cout << "PCMig::updatePowerBudgets: unknown thread state encountered" << endl;
-				exit(1);
-		}
-	}
-
-	if (recalculateComputeBound) {
-		std::vector<bool> unrestrictedCores(coreRows * coreColumns);
-		for (unsigned int coreCounter = 0; coreCounter < coreRows * coreColumns; coreCounter++) {
-			unrestrictedCores.at(coreCounter) = (threadStates.at(coreCounter) == ThreadState::COMPUTE);
-		}
-		float uniformPerCorePowerBudget = thermalModel->tsp(unrestrictedCores);
-		for (unsigned int coreCounter = 0; coreCounter < coreRows * coreColumns; coreCounter++) {
-			if (unrestrictedCores.at(coreCounter)) {
-				powerBudgets.at(coreCounter) = uniformPerCorePowerBudget;
-			}
-		}
-	}
-}
-
-std::vector<int> PCMig::getFrequencies(const std::vector<int> &oldFrequencies, const std::vector<bool> &activeCores) {
-	updatePowerBudgets(oldFrequencies);
-
-	std::vector<int> frequencies(coreRows * coreColumns);
-
-	for (unsigned int coreCounter = 0; coreCounter < coreRows * coreColumns; coreCounter++) {
-		if (activeCores.at(coreCounter)) {
-			float powerBudget = powerBudgets.at(coreCounter);
-			float power = performanceCounters->getPowerOfCore(coreCounter);
-			float temperature = performanceCounters->getTemperatureOfCore(coreCounter);
-			int frequency = oldFrequencies.at(coreCounter);
-			float utilization = performanceCounters->getUtilizationOfCore(coreCounter);
-
-			float RelNUCACPI  = performanceCounters->getRelNUCACPIOfCore(coreCounter);
-           	float IPS         = performanceCounters->getIPSOfCore(coreCounter);
-           	float cpi_total   = performanceCounters->getCPIOfCore(coreCounter);
-           	float peak_temperature = performanceCounters->getPeakTemperature();
-
-            // Identify thread state
-            string threadStateStr;
-            switch (threadStates.at(coreCounter)) {
-                case ThreadState::IDLE: threadStateStr = "IDLE"; break;
-                case ThreadState::COMPUTE: threadStateStr = "COMPUTE"; break;
-                case ThreadState::MEMORY: threadStateStr = "MEMORY"; break;
-                default: threadStateStr = "UNKNOWN"; break;
-            }
-
-			// Print to console
-			cout << "[Scheduler][PCMig]: Core " << setw(2) << coreCounter << " [" << threadStateStr << "] "
-			     << ": P=" << fixed << setprecision(4) << power << " W"
-			     << " (budget: " << fixed << setprecision(4) << powerBudget << " W)"
-			     << " f=" << frequency << " MHz"
-			     << " T=" << fixed << setprecision(1) << temperature << " °C"
-			     << " utilization=" << fixed << setprecision(4) << utilization << endl;
-
-			cout << " IPS=" << fixed << setprecision(3) << IPS 
-			     << " RelNUCACPI=" << fixed << setprecision(3) << RelNUCACPI
-			     << " hotspot_peak_temperature=" << fixed << setprecision(3) << peak_temperature
-			     << " cpi-total=" << fixed << setprecision(3) << cpi_total << endl;
-
-            // Write CSV header once
-            if (!headerWritten) {
-                logFile << "core_id,thread_state,power,power_budget,frequency,temperature,utilization,IPS,RelNUCACPI,hotspot_peak_temperature,cpi_total" << endl;
-                headerWritten = true;
-            }
-
-            // Write to CSV
-            logFile << coreCounter << "," 
-                    << threadStateStr << ","
-                    << fixed << setprecision(4) << power << ","
-                    << fixed << setprecision(4) << powerBudget << ","
-                    << frequency << ","
-                    << fixed << setprecision(1) << temperature << ","
-                    << fixed << setprecision(4) << utilization << ","
-                    << fixed << setprecision(3) << IPS << ","
-                    << fixed << setprecision(3) << RelNUCACPI << ","
-                    << fixed << setprecision(3) << peak_temperature << ","
-                    << fixed << setprecision(3) << cpi_total
-                    << endl;
-
-			int expectedGoodFrequency = PowerModel::getExpectedGoodFrequency(frequency, power, powerBudget, minFrequency, maxFrequency, frequencyStepSize);
-			frequencies.at(coreCounter) = expectedGoodFrequency;
-		} else {
-			frequencies.at(coreCounter) = minFrequency;
-		}
-	}
-
-	return frequencies;
-}
-
 
 /** getMappingCandidates
  * Get all near-Pareto-optimal mappings considered in PCMig.
@@ -291,6 +180,11 @@ std::vector<int> PCMig::map(String taskName, int taskCoreRequirement, const vect
 		}
 	}
 
+    // Save the best mapping's amdMax for later use in getFrequencies
+    if (!mappingCandidates.empty()) {
+        lastBestAmdMax = get<0>(mappingCandidates.at(bestMappingNb));
+    }
+
 	// return the cores
 	return get<2>(mappingCandidates.at(bestMappingNb));
 }
@@ -372,38 +266,57 @@ std::vector<int> PCMig::getFrequencies(const std::vector<int> &oldFrequencies, c
 			float temperature = performanceCounters->getTemperatureOfCore(coreCounter);
 			int frequency = oldFrequencies.at(coreCounter);
 			float utilization = performanceCounters->getUtilizationOfCore(coreCounter);
-
-			cout << "[Scheduler][PCMig]: Core " << setw(2) << coreCounter << " ";
-			switch (threadStates.at(coreCounter)) {
-				case ThreadState::IDLE:
-					cout << "[IDLE]   ";
-					break;
-				case ThreadState::COMPUTE:
-					cout << "[COMPUTE]";
-					break;
-				case ThreadState::MEMORY:
-					cout << "[MEMORY] ";
-					break;
-				default:
-					cout << "[???????]";
-					break;
-			}
-			cout << ": P=" << fixed << setprecision(4) << power << " W";
-			cout << " (budget: " << fixed << setprecision(4) << powerBudget << " W)";
-			cout << " f=" << frequency << " MHz";
-			cout << " T=" << fixed << setprecision(1) << temperature << " °C";
-			cout << " utilization=" << fixed << setprecision(4) << utilization << endl;
-
 			float RelNUCACPI  = performanceCounters->getRelNUCACPIOfCore(coreCounter);
            	float IPS         = performanceCounters->getIPSOfCore(coreCounter);
            	float cpi_total   = performanceCounters->getCPIOfCore(coreCounter);
            	float peak_temperature = performanceCounters->getPeakTemperature();
+            float amdValue = amds.at(coreCounter);  // Get AMD value for this core
 
-			cout << " IPS=" << fixed << setprecision(3) << IPS ;
-           	cout << " RelNUCACPI=" << fixed << setprecision(3) << RelNUCACPI ;
-           	cout << " hotspot_peak_temperature=" << fixed << setprecision(3) << peak_temperature ;
-           	cout << " cpi-total=" << fixed << setprecision(3) <<cpi_total << endl;
+            // Identify thread state
+            string threadStateStr;
+            switch (threadStates.at(coreCounter)) {
+                case ThreadState::IDLE: threadStateStr = "IDLE"; break;
+                case ThreadState::COMPUTE: threadStateStr = "COMPUTE"; break;
+                case ThreadState::MEMORY: threadStateStr = "MEMORY"; break;
+                default: threadStateStr = "UNKNOWN"; break;
+            }
 
+			// Print to console
+			cout << "[Scheduler][PCMig]: Core " << setw(2) << coreCounter << " [" << threadStateStr << "] "
+			     << ": P=" << fixed << setprecision(4) << power << " W"
+			     << " (budget: " << fixed << setprecision(4) << powerBudget << " W)"
+			     << " f=" << frequency << " MHz"
+			     << " T=" << fixed << setprecision(1) << temperature << " °C"
+			     << " utilization=" << fixed << setprecision(4) << utilization 
+                 << " AMD=" << fixed << setprecision(4) << amdValue
+                 << " (lastBestAmdMax=" << fixed << setprecision(4) << lastBestAmdMax << ")" << endl;
+
+			cout << " IPS=" << fixed << setprecision(3) << IPS 
+			     << " RelNUCACPI=" << fixed << setprecision(3) << RelNUCACPI
+			     << " hotspot_peak_temperature=" << fixed << setprecision(3) << peak_temperature
+			     << " cpi-total=" << fixed << setprecision(3) << cpi_total << endl;
+
+            // Write CSV header once
+            if (!headerWritten) {
+                logFile << "core_id,thread_state,power,power_budget,frequency,temperature,utilization,amd,best_amd_max,IPS,RelNUCACPI,hotspot_peak_temperature,cpi_total" << endl;
+                headerWritten = true;
+            }
+
+            // Write to CSV - now including AMD values
+            logFile << coreCounter << "," 
+                    << threadStateStr << ","
+                    << fixed << setprecision(4) << power << ","
+                    << fixed << setprecision(4) << powerBudget << ","
+                    << frequency << ","
+                    << fixed << setprecision(1) << temperature << ","
+                    << fixed << setprecision(4) << utilization << ","
+                    << fixed << setprecision(4) << amdValue << ","
+                    << fixed << setprecision(4) << lastBestAmdMax << ","
+                    << fixed << setprecision(3) << IPS << ","
+                    << fixed << setprecision(3) << RelNUCACPI << ","
+                    << fixed << setprecision(3) << peak_temperature << ","
+                    << fixed << setprecision(3) << cpi_total
+                    << endl;
 
 			int expectedGoodFrequency = PowerModel::getExpectedGoodFrequency(frequency, power, powerBudget, minFrequency, maxFrequency, frequencyStepSize);
 			frequencies.at(coreCounter) = expectedGoodFrequency;

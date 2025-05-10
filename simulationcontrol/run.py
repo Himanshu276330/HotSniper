@@ -10,6 +10,8 @@ import subprocess
 import time
 import traceback
 import sys
+import json
+import datetime 
 
 
 from config import NUMBER_CORES, RESULTS_FOLDER, SNIPER_CONFIG, SCRIPTS, ENABLE_HEARTBEATS
@@ -156,7 +158,11 @@ def run(base_configuration, benchmark, ignore_error=False, perforation_script: s
     p.wait()
 
     try:
-        cpistack = subprocess.check_output(['python', os.path.join(SNIPER_BASE, 'tools/cpistack.py')], cwd=BENCHMARKS)
+         # Original line
+        # cpistack = subprocess.check_output(['python', os.path.join(SNIPER_BASE, 'tools/cpistack.py')], cwd=BENCHMARKS)
+        
+        # Modified line - add the --partial flag
+        cpistack = subprocess.check_output(['python', os.path.join(SNIPER_BASE, 'tools/cpistack.py'), '--partial'], cwd=BENCHMARKS)
     except:
         if ignore_error:
             cpistack = b''
@@ -259,18 +265,42 @@ def get_workload(benchmark, cores, parallelism=None, number_tasks=None, input_se
     else:
         raise Exception('either parallelism or number_tasks needs to be set')
 
+def create_output_scv(benchmark, parallelism, freq):
+    result_path = '/home/shekhar154/Desktop/sem_8/HotSniper_old/result_path_variable.json'
+
+    # Get the current date and time
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+
+    try:
+        # Read the JSON file
+        with open(result_path, 'r') as file:
+            data = json.load(file)
+            print("JSON data loaded successfully:")
+
+            # Update the result_path field
+            data["result_path"] = '/home/shekhar154/Desktop/sem_8/HotSniper_old/results/{}-{}-{}-{}'.format(benchmark, parallelism, freq, current_time)
+
+            # Write the updated data back to the same file
+            with open(result_path, 'w') as file:
+                json.dump(data, file, indent=4)
+                print("JSON file updated successfully.")
+
+    except FileNotFoundError:
+        print("File not found: {}".format(result_path))
+    except json.JSONDecodeError:
+        print("Error decoding JSON from: {}".format(result_path))
+
 
 def example():
     for benchmark in (
+                    #   'parsec-bodytrack',
                     #   'parsec-blackscholes',
-                      'parsec-bodytrack',
                     #   'parsec-canneal',
-                    #   'parsec-dedup',
-                    #   'parsec-fluidanimate',
-                    #   'parsec-streamcluster',
-                    #   'parsec-swaptions',
-                    #   'parsec-x264',
-
+                      'parsec-dedup',
+                      'parsec-fluidanimate',  # This line had a missing opening quote in your code
+                      'parsec-streamcluster',
+                      'parsec-swaptions',
+                      'parsec-x264',
                       #'parsec-ferret'
                       #'splash2-barnes',
                       #'splash2-fmm',
@@ -286,26 +316,18 @@ def example():
                       #'splash2-lu.ncont',
                       #'splash2-radix',
                       ):
-
-        # min_parallelism = get_feasible_parallelisms(benchmark)[0]
-        # max_parallelism = get_feasible_parallelisms(benchmark)[-1]
-
-        # for 2 parr - 8 <> 16
-
-        # for freq in (1, 2):
-        #     #for parallelism in (max_parallelism,):
-        #     for parallelism in (3, ):
-        #         # you can also use try_run instead
-        #         # run(['{:.1f}GHz'.format(freq), 'maxFreq', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-        #         # run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-        #         run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-
+        
         for freq in (1, 2, 3, 3.5):
             for parallelism in (8, 16):
+                create_output_scv(benchmark, parallelism, freq)
                 # run(['{:.1f}GHz'.format(freq), 'maxFreq', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
                 # run(['{:.1f}GHz'.format(freq), 'PCGov', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
                 # run(['{:.1f}GHz'.format(freq), 'fixedPower', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
-                run(['{:.1f}GHz'.format(freq), 'PCMig', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                try:
+                    run(['{:.1f}GHz'.format(freq), 'PCMig', 'slowDVFS'], get_instance(benchmark, parallelism, input_set='simsmall'))
+                except Infeasible:
+                    print("Skipping benchmark with parallelism parallelism- configuration not supported")
+                
 
 def example_symmetric_perforation():
     for benchmark in (
@@ -383,6 +405,6 @@ def main():
 
     # example_symmetric_perforation()
     # example_asymmetric_perforation()
-    
+
 if __name__ == '__main__':
     main()
